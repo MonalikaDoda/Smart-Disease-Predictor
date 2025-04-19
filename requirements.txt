@@ -1,3 +1,5 @@
 streamlit
 tensorflow
 Pillow
+numpy
+huggingface_hub
