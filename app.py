@@ -24,6 +24,16 @@ CLASS_LABELS = {
     "Breast Cancer": ["Benign", "Malignant", "Normal"]
 }
 
+# Target input size per model
+TARGET_SIZES = {
+    "Tuberculosis": (224, 224),
+    "Brain Tumor": (150, 150),
+    "Lung Cancer": (144, 144),
+    "Eye Disease": (224, 224),
+    "COVID/Pneumonia": (224, 224),
+    "Breast Cancer": (224, 224)
+}
+
 @st.cache_resource
 def load_model(repo_id):
     model_path = hf_hub_download(repo_id=repo_id, filename="model.h5")
@@ -42,19 +52,18 @@ uploaded_image = st.file_uploader("📷 Upload an Image", type=["jpg", "jpeg", "
 # When image and disease are both selected
 if uploaded_image and disease:
     try:
-        # Try to open and display the image
+        # Open and display image
         image = Image.open(uploaded_image).convert("RGB")
         st.image(image, caption="Uploaded Image", use_column_width=True)
 
-        # Preprocess image
-        image = image.resize((224, 224))
+        # Resize based on disease
+        target_size = TARGET_SIZES[disease]
+        image = image.resize(target_size)
         image_array = np.expand_dims(np.array(image) / 255.0, axis=0)
 
-        # Load model
+        # Load and predict
         with st.spinner("🔄 Loading model..."):
             model = load_model(MODEL_REPOS[disease])
-
-        # Predict
         prediction = model.predict(image_array)
         predicted_class = CLASS_LABELS[disease][np.argmax(prediction)]
         st.success(f"✅ Predicted Class: **{predicted_class}**")
