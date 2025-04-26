@@ -46,35 +46,54 @@ st.markdown("Upload a medical image and select a disease type to detect using AI
 # Disease selection
 disease = st.selectbox("🩺 Select Disease Type", list(MODEL_REPOS.keys()))
 
-# File uploader
-uploaded_image = st.file_uploader("📷 Upload an Image", type=["jpg", "jpeg", "png"])
+# File uploader with explicit accept parameter
+uploaded_image = st.file_uploader(
+    "📷 Upload an Image",
+    type=["jpg", "jpeg", "png"],
+    accept_multiple_files=False,
+    help="Please upload a single medical scan image"
+)
 
-# When image and disease are both selected
-if uploaded_image and disease:
+# Prediction button - Only enabled when image is uploaded
+predict_button = st.button("🔍 Predict", disabled=not uploaded_image)
+
+if predict_button and uploaded_image:
     try:
         # Open and display image
         image = Image.open(uploaded_image).convert("RGB")
-        st.image(image, caption="Uploaded Image", use_container_width=True)
+        st.image(image, caption="Uploaded Image", use_column_width=True)
 
         # Resize and preprocess image
         target_size = TARGET_SIZES[disease]
         image = image.resize(target_size)
         image_array = np.array(image).astype("float32") / 255.0
 
-        # Special case for Lung Cancer model (flatten input)
+        # Special case for Lung Cancer model
         if disease == "Lung Cancer":
             image_array = image_array.flatten().reshape(1, -1)
         else:
             image_array = np.expand_dims(image_array, axis=0)
 
-        # Load and predict
-        with st.spinner("🔄 Loading model..."):
+        # Load model and predict with progress
+        with st.spinner("🧠 Loading model and analyzing..."):
             model = load_model(MODEL_REPOS[disease])
-        prediction = model.predict(image_array)
-        predicted_class = CLASS_LABELS[disease][np.argmax(prediction)]
-        st.success(f"✅ Predicted Class: **{predicted_class}**")
+            prediction = model.predict(image_array)
+            
+            # Get confidence scores
+            confidence = np.max(prediction) * 100
+            predicted_class = CLASS_LABELS[disease][np.argmax(prediction)]
+            
+            # Display results
+            st.success(f"✅ **Prediction:** {predicted_class}")
+            st.info(f"🔢 **Confidence:** {confidence:.2f}%")
+            
+            # Show full probability distribution (optional)
+            with st.expander("📊 Detailed probabilities"):
+                for i, (class_name, prob) in enumerate(zip(CLASS_LABELS[disease], prediction[0])):
+                    st.progress(float(prob), text=f"{class_name}: {prob*100:.2f}%")
 
     except UnidentifiedImageError:
-        st.error("❌ Unable to read the image. Please upload a valid medical image.")
+        st.error("❌ Invalid image format. Please upload a valid JPG/PNG medical scan.")
     except Exception as e:
-        st.error(f"❌ Something went wrong: {e}")
+        st.error(f"❌ Prediction failed: {str(e)}")
+        st.stop()
