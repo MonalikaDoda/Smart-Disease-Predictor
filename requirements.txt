@@ -1,5 +1,8 @@
-streamlit
-tensorflow
-pillow
-numpy
-huggingface_hub
+streamlit==1.29.0 
+tensorflow==2.16.1
+numpy==1.26.4
+Pillow==10.2.0 
+huggingface-hub==0.22.2
+protobuf==4.25.3  
+requests==2.31.0  
+typing-extensions==4.11.0 
