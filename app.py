@@ -34,6 +34,9 @@ TARGET_SIZES = {
     "Breast Cancer": (224, 224)
 }
 
+# Models that require flat input
+FLAT_INPUT_MODELS = ["Lung Cancer"]
+
 @st.cache_resource
 def load_model(repo_id):
     model_path = hf_hub_download(repo_id=repo_id, filename="model.h5")
@@ -49,17 +52,23 @@ disease = st.selectbox("🩺 Select Disease Type", list(MODEL_REPOS.keys()))
 # File uploader
 uploaded_image = st.file_uploader("📷 Upload an Image", type=["jpg", "jpeg", "png"])
 
+# When image and disease are both selected
 if uploaded_image and disease:
     try:
-        # Display image
+        # Open and display image
         image = Image.open(uploaded_image).convert("RGB")
-        st.image(image, caption="Uploaded Image", use_column_width=True)
+        st.image(image, caption="Uploaded Image", use_container_width=True)
 
-        # Resize based on model input
+        # Resize and preprocess image
         target_size = TARGET_SIZES[disease]
         image = image.resize(target_size)
         image_array = np.array(image).astype("float32") / 255.0
-        image_array = np.expand_dims(image_array, axis=0)
+
+        # Flatten if model expects flat input
+        if disease in FLAT_INPUT_MODELS:
+            image_array = image_array.flatten().reshape(1, -1)  # (1, N)
+        else:
+            image_array = np.expand_dims(image_array, axis=0)  # (1, H, W, 3)
 
         # Load and predict
         with st.spinner("🔄 Loading model..."):
