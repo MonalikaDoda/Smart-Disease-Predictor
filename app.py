@@ -1,10 +1,12 @@
 import streamlit as st
 import tensorflow as tf
-from PIL import Image, UnidentifiedImageError
+from PIL import Image
 import numpy as np
-from huggingface_hub import hf_hub_download 
+from huggingface_hub import hf_hub_download
+import datetime
+from io import BytesIO
 
-# Model repo mapping from Hugging Face
+# Model configuration
 MODEL_REPOS = {
     "Tuberculosis": "monalika128/tb_model",
     "Brain Tumor": "monalika128/Brain_Tumor_Model",
@@ -14,7 +16,6 @@ MODEL_REPOS = {
     "Breast Cancer": "monalika128/breast_cancer_model"
 }
 
-# Class labels for each model
 CLASS_LABELS = {
     "Tuberculosis": ["Normal", "Tuberculosis"],
     "Brain Tumor": ["Glioma", "Meningioma", "No Tumor", "Pituitary"],
@@ -24,7 +25,6 @@ CLASS_LABELS = {
     "Breast Cancer": ["Benign", "Malignant", "Normal"]
 }
 
-# Target input size per model
 TARGET_SIZES = {
     "Tuberculosis": (224, 224),
     "Brain Tumor": (150, 150),
@@ -34,66 +34,142 @@ TARGET_SIZES = {
     "Breast Cancer": (224, 224)
 }
 
+# UI Config
+st.set_page_config(
+    page_title="AI Disease Detector",
+    page_icon="🏥",
+    layout="wide"
+)
+
+# Custom CSS
+st.markdown("""
+<style>
+    .report-title {
+        font-size: 24px;
+        color: #1e3a8a;
+        text-align: center;
+        margin-bottom: 30px;
+    }
+    .patient-info {
+        background-color: #f0f7ff;
+        padding: 15px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+    }
+    .result-card {
+        border-left: 5px solid #3b82f6;
+        padding: 15px;
+        background-color: white;
+        border-radius: 5px;
+        margin: 10px 0;
+    }
+    .positive {
+        border-left-color: #ef4444;
+        background-color: #fef2f2;
+    }
+    .negative {
+        border-left-color: #10b981;
+        background-color: #ecfdf5;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 @st.cache_resource
 def load_model(repo_id):
     model_path = hf_hub_download(repo_id=repo_id, filename="model.h5")
     return tf.keras.models.load_model(model_path)
 
-# Streamlit App UI
-st.title("🧠 Smart Disease Predictor")
-st.markdown("Upload a medical image and select a disease type to detect using AI.")
+def generate_report(patient_data, image, prediction, confidence):
+    """Generate PDF report (simplified for demo)"""
+    from fpdf import FPDF
+    
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+    
+    # Report header
+    pdf.cell(200, 10, txt="Medical Imaging Report", ln=1, align='C')
+    pdf.ln(10)
+    
+    # Patient info
+    pdf.cell(200, 10, txt=f"Patient ID: {patient_data.get('id', 'N/A')}", ln=1)
+    pdf.cell(200, 10, txt=f"Date: {datetime.datetime.now().strftime('%Y-%m-%d')}", ln=1)
+    pdf.ln(5)
+    
+    # Save image temporarily
+    image_path = "temp_image.jpg"
+    image.save(image_path)
+    pdf.image(image_path, w=100)
+    
+    # Results
+    pdf.ln(10)
+    pdf.set_font("Arial", 'B', 14)
+    pdf.cell(200, 10, txt="Diagnosis Results", ln=1)
+    pdf.set_font("Arial", size=12)
+    pdf.cell(200, 10, txt=f"Condition: {prediction}", ln=1)
+    pdf.cell(200, 10, txt=f"Confidence: {confidence:.2f}%", ln=1)
+    
+    report_bytes = BytesIO(pdf.output(dest='S').encode('latin-1'))
+    return report_bytes
+
+# Main App
+st.title("🏥 AI Disease Detector")
+st.markdown("Upload a medical scan for automated analysis")
 
 # Disease selection
-disease = st.selectbox("🩺 Select Disease Type", list(MODEL_REPOS.keys()))
+disease = st.selectbox("Select Disease Type", list(MODEL_REPOS.keys()))
 
-# File uploader with explicit accept parameter
-uploaded_image = st.file_uploader(
-    "📷 Upload an Image",
-    type=["jpg", "jpeg", "png"],
-    accept_multiple_files=False,
-    help="Please upload a single medical scan image"
-)
+# Optional patient info
+with st.expander("➕ Add Patient Information (Optional)"):
+    patient_data = {
+        "id": st.text_input("Patient ID"),
+        "age": st.number_input("Age", min_value=1, max_value=120),
+        "gender": st.selectbox("Gender", ["", "Male", "Female", "Other"])
+    }
 
-# Prediction button - Only enabled when image is uploaded
-predict_button = st.button("🔍 Predict", disabled=not uploaded_image)
+# Image upload
+uploaded_image = st.file_uploader("Upload Medical Scan", type=["jpg", "jpeg", "png"])
 
-if predict_button and uploaded_image:
-    try:
-        # Open and display image
-        image = Image.open(uploaded_image).convert("RGB")
-        st.image(image, caption="Uploaded Image", use_column_width=True)
-
-        # Resize and preprocess image
-        target_size = TARGET_SIZES[disease]
-        image = image.resize(target_size)
-        image_array = np.array(image).astype("float32") / 255.0
-
-        # Special case for Lung Cancer model
-        if disease == "Lung Cancer":
-            image_array = image_array.flatten().reshape(1, -1)
-        else:
-            image_array = np.expand_dims(image_array, axis=0)
-
-        # Load model and predict with progress
-        with st.spinner("🧠 Loading model and analyzing..."):
-            model = load_model(MODEL_REPOS[disease])
-            prediction = model.predict(image_array)
+if uploaded_image:
+    image = Image.open(uploaded_image).convert("RGB")
+    st.image(image, caption="Uploaded Scan", use_container_width=True)
+    
+    if st.button("Analyze Scan"):
+        with st.spinner("Processing..."):
+            # Preprocessing
+            target_size = TARGET_SIZES[disease]
+            img_array = np.array(image.resize(target_size)) / 255.0
+            img_array = np.expand_dims(img_array, axis=0)
             
-            # Get confidence scores
-            confidence = np.max(prediction) * 100
-            predicted_class = CLASS_LABELS[disease][np.argmax(prediction)]
+            # Prediction
+            model = load_model(MODEL_REPOS[disease])
+            pred = model.predict(img_array)
+            confidence = np.max(pred) * 100
+            prediction = CLASS_LABELS[disease][np.argmax(pred)]
             
             # Display results
-            st.success(f"✅ **Prediction:** {predicted_class}")
-            st.info(f"🔢 **Confidence:** {confidence:.2f}%")
+            result_class = "positive" if prediction != "Normal" else "negative"
+            st.markdown(f"""
+            <div class="result-card {result_class}">
+                <h3>Analysis Result</h3>
+                <p><strong>Condition:</strong> {prediction}</p>
+                <p><strong>Confidence:</strong> {confidence:.2f}%</p>
+            </div>
+            """, unsafe_allow_html=True)
             
-            # Show full probability distribution (optional)
-            with st.expander("📊 Detailed probabilities"):
-                for i, (class_name, prob) in enumerate(zip(CLASS_LABELS[disease], prediction[0])):
-                    st.progress(float(prob), text=f"{class_name}: {prob*100:.2f}%")
+            # Generate report
+            report = generate_report(patient_data, image, prediction, confidence)
+            st.download_button(
+                label="📄 Download Report",
+                data=report,
+                file_name=f"medical_report_{datetime.datetime.now().strftime('%Y%m%d')}.pdf",
+                mime="application/pdf"
+            )
 
-    except UnidentifiedImageError:
-        st.error("❌ Invalid image format. Please upload a valid JPG/PNG medical scan.")
-    except Exception as e:
-        st.error(f"❌ Prediction failed: {str(e)}")
-        st.stop()
+# How it works section
+with st.expander("ℹ️ How this works"):
+    st.markdown("""
+    - AI analyzes medical images for specific conditions
+    - Patient information is optional and never affects results
+    - Reports include scan date/time for documentation
+    """)
