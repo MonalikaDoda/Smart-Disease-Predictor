@@ -61,7 +61,7 @@ if predict_button and uploaded_image:
     try:
         # Open and display image
         image = Image.open(uploaded_image).convert("RGB")
-        st.image(image, caption="Uploaded Image", use_container_width=True)
+        st.image(image, caption="Uploaded Image", width=None)
 
         # Resize and preprocess image
         target_size = TARGET_SIZES[disease]
