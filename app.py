@@ -34,9 +34,6 @@ TARGET_SIZES = {
     "Breast Cancer": (224, 224)
 }
 
-# Models that require flat input
-FLAT_INPUT_MODELS = ["Lung Cancer"]
-
 @st.cache_resource
 def load_model(repo_id):
     model_path = hf_hub_download(repo_id=repo_id, filename="model.h5")
@@ -64,11 +61,11 @@ if uploaded_image and disease:
         image = image.resize(target_size)
         image_array = np.array(image).astype("float32") / 255.0
 
-        # Flatten if model expects flat input
-        if disease in FLAT_INPUT_MODELS:
-            image_array = image_array.flatten().reshape(1, -1)  # (1, N)
+        # Special case for Lung Cancer model (flatten input)
+        if disease == "Lung Cancer":
+            image_array = image_array.flatten().reshape(1, -1)
         else:
-            image_array = np.expand_dims(image_array, axis=0)  # (1, H, W, 3)
+            image_array = np.expand_dims(image_array, axis=0)
 
         # Load and predict
         with st.spinner("🔄 Loading model..."):
