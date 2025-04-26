@@ -49,17 +49,17 @@ disease = st.selectbox("🩺 Select Disease Type", list(MODEL_REPOS.keys()))
 # File uploader
 uploaded_image = st.file_uploader("📷 Upload an Image", type=["jpg", "jpeg", "png"])
 
-# When image and disease are both selected
 if uploaded_image and disease:
     try:
-        # Open and display image
+        # Display image
         image = Image.open(uploaded_image).convert("RGB")
         st.image(image, caption="Uploaded Image", use_column_width=True)
 
-        # Resize based on disease
+        # Resize based on model input
         target_size = TARGET_SIZES[disease]
         image = image.resize(target_size)
-        image_array = np.expand_dims(np.array(image) / 255.0, axis=0)
+        image_array = np.array(image).astype("float32") / 255.0
+        image_array = np.expand_dims(image_array, axis=0)
 
         # Load and predict
         with st.spinner("🔄 Loading model..."):
