@@ -1,62 +1,99 @@
 import streamlit as st
 import tensorflow as tf
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 import numpy as np
-from huggingface_hub import hf_hub_download
+from huggingface_hub import hf_hub_download 
 
-# --- Constants ---
-MODEL_CONFIG = {
-    "Tuberculosis": {
-        "repo": "monalika128/tb_model",
-        "labels": ["Normal", "Tuberculosis"],
-        "size": (224, 224)
-    },
-    # Add other diseases here...
+# Model repo mapping from Hugging Face
+MODEL_REPOS = {
+    "Tuberculosis": "monalika128/tb_model",
+    "Brain Tumor": "monalika128/Brain_Tumor_Model",
+    "Lung Cancer": "monalika128/LungCancer_Model",
+    "Eye Disease": "monalika128/eye_disease_model",
+    "COVID/Pneumonia": "monalika128/Pneumonia_Model",
+    "Breast Cancer": "monalika128/breast_cancer_model"
 }
 
-# --- UI Setup ---
-st.set_page_config(page_title="MedScan AI", page_icon="🏥", layout="centered")
-st.title("🔍 MedScan AI")
-st.markdown("Upload a medical scan for instant analysis")
+# Class labels for each model
+CLASS_LABELS = {
+    "Tuberculosis": ["Normal", "Tuberculosis"],
+    "Brain Tumor": ["Glioma", "Meningioma", "No Tumor", "Pituitary"],
+    "Lung Cancer": ["Benign", "Malignant", "Normal"],
+    "Eye Disease": ["Normal", "Cataract", "Diabetic Retinopathy", "Glaucoma"],
+    "COVID/Pneumonia": ["COVID", "Normal", "Pneumonia"],
+    "Breast Cancer": ["Benign", "Malignant", "Normal"]
+}
 
-# --- Core Function ---
-def analyze_image(image, disease):
-    """Process image and return prediction"""
-    model = load_model(MODEL_CONFIG[disease]["repo"])
-    img_array = np.array(image.resize(MODEL_CONFIG[disease]["size"])) / 255.0
-    img_array = np.expand_dims(img_array, axis=0)
-    pred = model.predict(img_array)
-    return MODEL_CONFIG[disease]["labels"][np.argmax(pred)], np.max(pred) * 100
+# Target input size per model
+TARGET_SIZES = {
+    "Tuberculosis": (224, 224),
+    "Brain Tumor": (150, 150),
+    "Lung Cancer": (144, 144),
+    "Eye Disease": (224, 224),
+    "COVID/Pneumonia": (224, 224),
+    "Breast Cancer": (224, 224)
+}
 
 @st.cache_resource
 def load_model(repo_id):
-    return tf.keras.models.load_model(hf_hub_download(repo_id=repo_id, filename="model.h5"))
+    model_path = hf_hub_download(repo_id=repo_id, filename="model.h5")
+    return tf.keras.models.load_model(model_path)
 
-# --- Streamlit UI ---
-disease = st.selectbox("Select Disease", list(MODEL_CONFIG.keys()))
-uploaded_file = st.file_uploader("Choose a scan", type=["jpg", "jpeg", "png"])
+# Streamlit App UI
+st.title("🧠 Smart Disease Predictor")
+st.markdown("Upload a medical image and select a disease type to detect using AI.")
 
-if uploaded_file:
-    image = Image.open(uploaded_file)
-    st.image(image, caption="Your Scan", use_container_width=True)
-    
-    if st.button("Analyze Now"):
-        with st.spinner("🔬 Analyzing..."):
-            prediction, confidence = analyze_image(image, disease)
+# Disease selection
+disease = st.selectbox("🩺 Select Disease Type", list(MODEL_REPOS.keys()))
+
+# File uploader with explicit accept parameter
+uploaded_image = st.file_uploader(
+    "📷 Upload an Image",
+    type=["jpg", "jpeg", "png"],
+    accept_multiple_files=False,
+    help="Please upload a single medical scan image"
+)
+
+# Prediction button - Only enabled when image is uploaded
+predict_button = st.button("🔍 Predict", disabled=not uploaded_image)
+
+if predict_button and uploaded_image:
+    try:
+        # Open and display image
+        image = Image.open(uploaded_image).convert("RGB")
+        st.image(image, caption="Uploaded Image", use_container_width=True)
+
+        # Resize and preprocess image
+        target_size = TARGET_SIZES[disease]
+        image = image.resize(target_size)
+        image_array = np.array(image).astype("float32") / 255.0
+
+        # Special case for Lung Cancer model
+        if disease == "Lung Cancer":
+            image_array = image_array.flatten().reshape(1, -1)
+        else:
+            image_array = np.expand_dims(image_array, axis=0)
+
+        # Load model and predict with progress
+        with st.spinner("🧠 Loading model and analyzing..."):
+            model = load_model(MODEL_REPOS[disease])
+            prediction = model.predict(image_array)
             
-            # Display Results
-            if prediction == "Normal":
-                st.success(f"✅ Normal (Confidence: {confidence:.1f}%)")
-            else:
-                st.error(f"🚨 {prediction} Detected (Confidence: {confidence:.1f}%)")
+            # Get confidence scores
+            confidence = np.max(prediction) * 100
+            predicted_class = CLASS_LABELS[disease][np.argmax(prediction)]
             
-            # Confidence Meter
-            st.progress(int(confidence), text=f"Detection Confidence: {confidence:.1f}%")
+            # Display results
+            st.success(f"✅ **Prediction:** {predicted_class}")
+            st.info(f"🔢 **Confidence:** {confidence:.2f}%")
+            
+            # Show full probability distribution (optional)
+            with st.expander("📊 Detailed probabilities"):
+                for i, (class_name, prob) in enumerate(zip(CLASS_LABELS[disease], prediction[0])):
+                    st.progress(float(prob), text=f"{class_name}: {prob*100:.2f}%")
 
-# --- Minimal Patient Info (Optional) ---
-with st.expander("🆔 Optional Patient Info"):
-    st.text_input("Case Notes", help="For your reference only")
-
-# --- How It Works ---
-st.markdown("---")
-st.info("💡 How it works: AI analyzes your scan without storing any data.")
+    except UnidentifiedImageError:
+        st.error("❌ Invalid image format. Please upload a valid JPG/PNG medical scan.")
+    except Exception as e:
+        st.error(f"❌ Prediction failed: {str(e)}")
+        st.stop()
