@@ -28,7 +28,7 @@ CLASS_LABELS = {
 TARGET_SIZES = {
     "Tuberculosis": (224, 224),
     "Brain Tumor": (150, 150),
-    "Lung Cancer": (144, 144),
+    "Lung Cancer": (150, 150),  # Corrected to 150x150
     "Eye Disease": (224, 224),
     "COVID/Pneumonia": (224, 224),
     "Breast Cancer": (224, 224)
@@ -46,7 +46,7 @@ st.markdown("Upload a medical image and select a disease type to detect using AI
 # Disease selection
 disease = st.selectbox("🩺 Select Disease Type", list(MODEL_REPOS.keys()))
 
-# File uploader
+# File uploader with explicit accept parameter
 uploaded_image = st.file_uploader(
     "📷 Upload an Image",
     type=["jpg", "jpeg", "png"],
@@ -54,7 +54,7 @@ uploaded_image = st.file_uploader(
     help="Please upload a single medical scan image"
 )
 
-# Predict button
+# Prediction button - Only enabled when image is uploaded
 predict_button = st.button("🔍 Predict", disabled=not uploaded_image)
 
 if predict_button and uploaded_image:
@@ -67,30 +67,31 @@ if predict_button and uploaded_image:
         target_size = TARGET_SIZES[disease]
         image = image.resize(target_size)
         image_array = np.array(image).astype("float32") / 255.0
+        image_array = np.expand_dims(image_array, axis=0)  # ✅ Unified for all diseases
 
-        if disease == "Lung Cancer":
-            # Lung cancer model expects flattened input
-            image_array = image_array.flatten().reshape(1, -1)
-        else:
-            # All other models expect 4D input
-            image_array = np.expand_dims(image_array, axis=0)
-
-        # Load model and predict
+        # Load model and predict with progress
         with st.spinner("🧠 Loading model and analyzing..."):
             model = load_model(MODEL_REPOS[disease])
             prediction = model.predict(image_array)
-            
+
+            # Get confidence scores
             confidence = np.max(prediction) * 100
             predicted_class = CLASS_LABELS[disease][np.argmax(prediction)]
 
+            # Display results
             st.success(f"✅ **Prediction:** {predicted_class}")
             st.info(f"🔢 **Confidence:** {confidence:.2f}%")
+            
+            # Disclaimer for user
+            st.warning("⚠️ **Disclaimer:** Please consult a medical professional for final diagnosis.")
 
+            # Show full probability distribution (optional)
             with st.expander("📊 Detailed probabilities"):
                 for class_name, prob in zip(CLASS_LABELS[disease], prediction[0]):
                     st.progress(float(prob), text=f"{class_name}: {prob*100:.2f}%")
 
     except UnidentifiedImageError:
-        st.error("❌ Invalid image format. Please upload a valid JPG/PNG medical scan.")
+        st.error("❌ Invalid image format. Please upload a valid medical JPG/PNG scan.")
     except Exception as e:
         st.error(f"❌ Prediction failed: {str(e)}")
+        st.stop()
