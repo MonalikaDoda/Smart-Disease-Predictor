@@ -28,10 +28,10 @@ CLASS_LABELS = {
 TARGET_SIZES = {
     "Tuberculosis": (224, 224),
     "Brain Tumor": (150, 150),
-    "Lung Cancer": (224, 224),  # Corrected to 150x150
+    "Lung Cancer": (224, 224), 
     "Eye Disease": (150, 150),
     "COVID/Pneumonia": (224, 224),
-    "Breast Cancer": (224, 224)
+    "Breast Cancer": (150, 150)
 }
 
 @st.cache_resource
