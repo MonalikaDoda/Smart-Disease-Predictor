@@ -30,7 +30,7 @@ TARGET_SIZES = {
     "Brain Tumor": (150, 150),
     "Lung Cancer": (224, 224), 
     "Eye Disease": (150, 150),
-    "COVID/Pneumonia": (224, 224),
+    "COVID/Pneumonia": (150, 150),
     "Breast Cancer": (150, 150)
 }
 
